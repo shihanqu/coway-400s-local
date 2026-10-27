@@ -2,6 +2,9 @@ name: Test
 on: [push, pull_request]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   python:
     strategy:
@@ -21,3 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - run: docker build -t coway-400s-local:test .
+      - name: Exercise the container runtime
+        run: docker run --rm --mount "type=bind,source=${PWD}/tests,target=/tests,readonly" coway-400s-local:test python -m unittest discover -s /tests -v
+      - name: Verify persistent data volume permissions
+        run: docker run --rm -v /data coway-400s-local:test python -c "from pathlib import Path; from coway400s.security import tls_context, token; tls_context(Path('/data')); token(Path('/data')); print('Certificate and token created in data volume')"
