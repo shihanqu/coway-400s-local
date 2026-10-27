@@ -1,0 +1,22 @@
+services:
+  coway:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      COWAY_DATA_DIR: /data
+      COWAY_API_BIND: 0.0.0.0
+    ports:
+      - "9090:9090/tcp"
+      - "1053:1053/udp"
+      - "127.0.0.1:8080:8080/tcp"
+    volumes:
+      - coway-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  coway-data:

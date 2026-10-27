@@ -1,0 +1,12 @@
+.git
+.env*
+.coway
+.venv
+**/__pycache__
+tests
+tools
+docs
+*.pem
+*.key
+*.pcap
+*.apk

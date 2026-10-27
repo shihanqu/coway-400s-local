@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.coway/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+*.pem
+*.key
+*.pcap
+*.apk
+.DS_Store

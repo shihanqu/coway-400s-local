@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coway-400s-local"
+version = "0.1.0"
+description = "Local network control and app-free Wi-Fi setup for the Coway Airmega 400S"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Shihan Qu"}]
+dependencies = ["dnslib==0.9.26"]
+
+[project.urls]
+Homepage = "https://github.com/shihanqu/coway-400s-local"
+Issues = "https://github.com/shihanqu/coway-400s-local/issues"
+
+[project.scripts]
+coway400s = "coway400s.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
