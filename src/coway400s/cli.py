@@ -9,7 +9,7 @@ from pathlib import Path
 import socket
 import sys
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from .config import Config, environment, ipv4
 from .protocol import serial_number
@@ -52,7 +52,9 @@ def request(action, value=None, url=None):
     message = Request(base + path, data=body,
                       headers={"Authorization": "Bearer " + secret, "Content-Type": "application/json"})
     try:
-        with urlopen(message, timeout=16) as reply:
+        # The target is an explicitly selected local controller. Do not send
+        # its bearer token through ambient system/corporate HTTP proxies.
+        with build_opener(ProxyHandler({})).open(message, timeout=16) as reply:
             result = json.load(reply)
     except HTTPError as error:
         try:

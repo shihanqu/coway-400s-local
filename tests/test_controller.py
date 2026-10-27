@@ -1,5 +1,4 @@
 import asyncio
-from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
 import ssl
@@ -7,14 +6,15 @@ import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
+from unittest.mock import patch
 import warnings
 
 from coway400s.config import Config
 from coway400s.controller import Controller
 from coway400s.protocol import Frame, receive
 from coway400s.security import tls_context
-from coway400s.server import api_handler, stop_tls
+from coway400s.server import ControlHTTPServer, api_handler, stop_tls
 from test_protocol import SERIAL, MAC, frame
 
 
@@ -120,7 +120,8 @@ class ControllerTests(unittest.IsolatedAsyncioTestCase):
     async def test_api_auth_validation_and_state(self):
         await self.start_device()
         secret = "test-token-" * 4
-        api = ThreadingHTTPServer(("127.0.0.1", 0), api_handler(asyncio.get_running_loop(), self.controller, secret))
+        with patch("socket.getfqdn", side_effect=AssertionError("Local API must not reverse-resolve")):
+            api = ControlHTTPServer(("127.0.0.1", 0), api_handler(asyncio.get_running_loop(), self.controller, secret))
         worker = threading.Thread(target=api.serve_forever, daemon=True)
         worker.start()
 
@@ -131,7 +132,7 @@ class ControllerTests(unittest.IsolatedAsyncioTestCase):
             data = None if body is None else json.dumps(body).encode()
             request = Request(f"http://127.0.0.1:{api.server_port}" + path, data=data, headers=headers)
             try:
-                with urlopen(request, timeout=4) as response:
+                with build_opener(ProxyHandler({})).open(request, timeout=4) as response:
                     return response.status, json.load(response)
             except HTTPError as error:
                 with error:

@@ -4,6 +4,7 @@ import asyncio
 from concurrent.futures import TimeoutError as FutureTimeout
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 import json
 import logging
 import signal
@@ -17,6 +18,14 @@ from .protocol import SETTINGS
 from .security import tls_context, token
 
 LOG = logging.getLogger(__name__)
+
+
+class ControlHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer normally reverse-resolves its bind address. This local
+        # endpoint needs no DNS lookup (and must work with DNS offline).
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 class LocalDNS(asyncio.DatagramProtocol):
@@ -141,7 +150,7 @@ async def serve(config: Config, stop: asyncio.Event | None = None):
                                                     local_addr=(config.bind, config.dns_port))
         tls = await asyncio.start_server(controller.handle, config.bind, config.tls_port,
                                         ssl=context, ssl_handshake_timeout=15, ssl_shutdown_timeout=2)
-        api = ThreadingHTTPServer((config.api_bind, config.api_port), api_handler(loop, controller, secret))
+        api = ControlHTTPServer((config.api_bind, config.api_port), api_handler(loop, controller, secret))
         api.daemon_threads = True
         thread = threading.Thread(target=api.serve_forever, daemon=True)
         thread.start()

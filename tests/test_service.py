@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 import warnings
 
 from coway400s.protocol import receive
@@ -35,7 +35,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
             writer = None
             try:
                 def health():
-                    with urlopen(f"http://127.0.0.1:{api_port}/health", timeout=0.3) as result:
+                    with build_opener(ProxyHandler({})).open(f"http://127.0.0.1:{api_port}/health", timeout=0.3) as result:
                         return json.load(result)
                 for _ in range(60):
                     if process.poll() is not None:
@@ -46,7 +46,9 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
                     except OSError:
                         await asyncio.sleep(0.1)
                 else:
-                    self.fail("Service did not start")
+                    process.terminate()
+                    await asyncio.to_thread(process.wait, 5)
+                    self.fail("Service did not start: " + process.stdout.read().decode())
                 self.assertFalse(ready["connected"])
                 secret = (Path(directory) / "api-token").read_text().strip()
                 self.assertEqual((Path(directory) / "server.key").stat().st_mode & 0o077, 0)
@@ -66,13 +68,30 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
                 def state():
                     request = Request(f"http://127.0.0.1:{api_port}/api/state",
                                       headers={"Authorization": "Bearer " + secret})
-                    with urlopen(request, timeout=4) as response:
+                    with build_opener(ProxyHandler({})).open(request, timeout=4) as response:
                         return json.load(response)
                 query = asyncio.create_task(asyncio.to_thread(state))
                 self.assertEqual((await receive(reader)).payload, b"A1012QG")
                 writer.write(frame("A1012SM0003000100010003000300070002").encode())
                 await writer.drain()
                 self.assertEqual((await query)["speed"], 3)
+                # An ambient proxy must not receive local-control credentials.
+                proxy_env = dict(env, HTTP_PROXY="http://127.0.0.1:1", http_proxy="http://127.0.0.1:1",
+                                 NO_PROXY="", no_proxy="")
+                client = subprocess.Popen([sys.executable, "-m", "coway400s.cli", "status"],
+                                          env=proxy_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                try:
+                    self.assertEqual((await asyncio.wait_for(receive(reader), timeout=4)).payload, b"A1012QG")
+                    writer.write(frame("A1012SM0003000100010003000300070002").encode())
+                    await writer.drain()
+                    output, _ = await asyncio.to_thread(client.communicate, timeout=4)
+                    self.assertEqual(client.returncode, 0, output.decode())
+                    self.assertEqual(json.loads(output)["speed"], 3)
+                finally:
+                    if client.poll() is None:
+                        client.kill()
+                        await asyncio.to_thread(client.wait, 3)
+                    client.stdout.close()
                 process.terminate()
                 await asyncio.to_thread(process.wait, 5)
                 self.assertEqual(process.returncode, 0)
